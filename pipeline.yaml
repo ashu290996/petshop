@@ -75,7 +75,7 @@ stages:
               testResultsFiles: '**/surefire-reports/TEST-*.xml'
 
           - task: Maven@4
-            displayName: 'Run Unit Tests'
+            displayName: 'Run Package'
             inputs:
               mavenPomFile: 'pom.xml'
               goals: 'clean package'
