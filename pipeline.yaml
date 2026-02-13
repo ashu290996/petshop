@@ -86,6 +86,7 @@ stages:
 
           - task: PublishBuildArtifacts@1
             displayName: 'Publish JAR Artifact'
+            continueOnError: true
             inputs:
               pathToPublish: 'target/*.war'
               artifactName: 'app-artifact'
