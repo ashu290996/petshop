@@ -1,1 +1,575 @@
+# azure-pipelines.yml
+# DevSecOps Pipeline with SonarQube, OWASP, and Trivy
 
+trigger:
+  branches:
+    include:
+      - main
+pr:
+  branches:
+    include:
+      - main
+
+
+variables:
+  # Docker Registry
+  dockerRegistry: 'your-registry.azurecr.io'
+  imageName: 'myapp'
+  imageTag: '$(Build.BuildId)'
+  
+  # SonarQube
+  sonarQubeServiceConnection: 'SonarQube'
+  sonarProjectKey: 'myapp'
+  
+  # Kubernetes
+  kubernetesServiceConnection: 'AKS-Connection'
+  stagingNamespace: 'staging'
+  productionNamespace: 'production'
+  
+  # Build
+  vmImageName: 'ubuntu-latest'
+  mavenCacheFolder: $(Pipeline.Workspace)/.m2/repository
+  
+  # Security Thresholds
+  trivySeverity: 'HIGH,CRITICAL'
+  owaspFailOnCVSS: 7
+
+pool:
+  vmImage: $(vmImageName)
+
+stages:
+  # =====================================================
+  # STAGE 1: BUILD & UNIT TESTS
+  # =====================================================
+  - stage: Build
+    displayName: 'Build & Unit Tests'
+    jobs:
+      - job: BuildJob
+        displayName: 'Build Application'
+        steps:
+          - task: Cache@2
+            displayName: 'Cache Maven Dependencies'
+            inputs:
+              key: 'maven | "$(Agent.OS)" | pom.xml'
+              restoreKeys: |
+                maven | "$(Agent.OS)"
+              path: $(mavenCacheFolder)
+
+          - task: Maven@3
+            displayName: 'Maven Build'
+            inputs:
+              mavenPomFile: 'pom.xml'
+              goals: 'clean package'
+              options: '-DskipTests'
+              javaHomeOption: 'JDKVersion'
+              jdkVersionOption: '1.17'
+
+          - task: Maven@3
+            displayName: 'Run Unit Tests'
+            inputs:
+              mavenPomFile: 'pom.xml'
+              goals: 'test'
+              javaHomeOption: 'JDKVersion'
+              jdkVersionOption: '1.17'
+              publishJUnitResults: true
+              testResultsFiles: '**/surefire-reports/TEST-*.xml'
+
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publish JAR Artifact'
+            inputs:
+              pathToPublish: 'target/*.jar'
+              artifactName: 'app-artifact'
+
+  # =====================================================
+  # STAGE 2: SONARQUBE ANALYSIS (SAST)
+  # =====================================================
+  - stage: SonarQube
+    displayName: 'SonarQube Analysis'
+    dependsOn: Build
+    jobs:
+      - job: SonarAnalysis
+        displayName: 'SAST - Code Quality'
+        steps:
+          - task: Cache@2
+            inputs:
+              key: 'maven | "$(Agent.OS)" | pom.xml'
+              path: $(mavenCacheFolder)
+
+          - task: SonarQubePrepare@8
+            displayName: 'Prepare SonarQube Analysis'
+            inputs:
+              SonarQube: '$(sonarQubeServiceConnection)'
+              scannerMode: 'Other'
+              extraProperties: |
+                sonar.projectKey=$(sonarProjectKey)
+                sonar.projectName=$(sonarProjectKey)
+                sonar.java.binaries=target/classes
+                sonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
+                sonar.exclusions=**/test/**,**/generated/**
+
+          - task: Maven@3
+            displayName: 'Run SonarQube Analysis'
+            inputs:
+              mavenPomFile: 'pom.xml'
+              goals: 'verify sonar:sonar'
+              options: '-DskipTests'
+              javaHomeOption: 'JDKVersion'
+              jdkVersionOption: '1.17'
+
+          - task: SonarQubePublish@8
+            displayName: 'Publish SonarQube Results'
+            inputs:
+              pollingTimeoutSec: '300'
+
+  # =====================================================
+  # STAGE 3: SONARQUBE QUALITY GATE
+  # =====================================================
+  - stage: QualityGate
+    displayName: 'Quality Gate Check'
+    dependsOn: SonarQube
+    jobs:
+      - job: QualityGateJob
+        displayName: 'Check Quality Gate'
+        steps:
+          - task: SonarQubePublish@8
+            displayName: 'Wait for Quality Gate'
+            inputs:
+              pollingTimeoutSec: '300'
+
+          - script: |
+              echo "Quality Gate Status: $(SonarQube.QualityGateStatus)"
+              if [ "$(SonarQube.QualityGateStatus)" != "OK" ]; then
+                echo "##vso[task.logissue type=error]Quality Gate Failed!"
+                exit 1
+              fi
+            displayName: 'Validate Quality Gate'
+            condition: always()
+
+  # =====================================================
+  # STAGE 4: OWASP DEPENDENCY CHECK (SCA)
+  # =====================================================
+  - stage: OWASP_DependencyCheck
+    displayName: 'OWASP Dependency Check'
+    dependsOn: QualityGate
+    jobs:
+      - job: DependencyCheckJob
+        displayName: 'SCA - Dependency Scan'
+        steps:
+          - task: DownloadBuildArtifacts@0
+            inputs:
+              buildType: 'current'
+              downloadType: 'single'
+              artifactName: 'app-artifact'
+              downloadPath: '$(System.ArtifactsDirectory)'
+
+          - task: dependency-check-build-task@6
+            displayName: 'OWASP Dependency Check'
+            inputs:
+              projectName: '$(imageName)'
+              scanPath: '$(System.ArtifactsDirectory)/app-artifact'
+              format: 'HTML, JSON, XML'
+              failOnCVSS: '$(owaspFailOnCVSS)'
+              suppressionPath: ''
+              enableExperimental: true
+
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publish OWASP Report'
+            inputs:
+              pathToPublish: '$(Common.TestResultsDirectory)/dependency-check'
+              artifactName: 'owasp-report'
+            condition: always()
+
+          - task: PublishTestResults@2
+            displayName: 'Publish OWASP Test Results'
+            inputs:
+              testResultsFormat: 'JUnit'
+              testResultsFiles: '**/dependency-check-junit.xml'
+              testRunTitle: 'OWASP Dependency Check'
+            condition: always()
+
+  # =====================================================
+  # STAGE 5: TRIVY SCAN - JAR/TAR FILES
+  # =====================================================
+  - stage: Trivy_ArtifactScan
+    displayName: 'Trivy Artifact Scan'
+    dependsOn: OWASP_DependencyCheck
+    jobs:
+      - job: TrivyJarScan
+        displayName: 'Scan JAR Files'
+        steps:
+          - task: DownloadBuildArtifacts@0
+            inputs:
+              buildType: 'current'
+              downloadType: 'single'
+              artifactName: 'app-artifact'
+              downloadPath: '$(System.ArtifactsDirectory)'
+
+          - script: |
+              # Install Trivy
+              echo "Installing Trivy..."
+              curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin v0.48.0
+              
+              # Verify installation
+              trivy --version
+            displayName: 'Install Trivy'
+
+          - script: |
+              echo "=== Scanning JAR files for vulnerabilities ==="
+              
+              # Scan JAR files - Table format
+              trivy fs $(System.ArtifactsDirectory)/app-artifact \
+                --severity $(trivySeverity) \
+                --format table \
+                --output $(Build.ArtifactStagingDirectory)/trivy-jar-report.txt
+              
+              # Scan JAR files - JSON format
+              trivy fs $(System.ArtifactsDirectory)/app-artifact \
+                --severity $(trivySeverity) \
+                --format json \
+                --output $(Build.ArtifactStagingDirectory)/trivy-jar-report.json
+              
+              # Scan JAR files - SARIF format for Azure DevOps
+              trivy fs $(System.ArtifactsDirectory)/app-artifact \
+                --severity $(trivySeverity) \
+                --format sarif \
+                --output $(Build.ArtifactStagingDirectory)/trivy-jar-report.sarif
+              
+              # Display results
+              cat $(Build.ArtifactStagingDirectory)/trivy-jar-report.txt
+              
+              # Check for critical vulnerabilities
+              CRITICAL_COUNT=$(cat $(Build.ArtifactStagingDirectory)/trivy-jar-report.json | jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length')
+              echo "Critical vulnerabilities found: $CRITICAL_COUNT"
+              
+              if [ "$CRITICAL_COUNT" -gt 0 ]; then
+                echo "##vso[task.logissue type=warning]Critical vulnerabilities detected in JAR files!"
+              fi
+            displayName: 'Trivy JAR Scan'
+
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publish Trivy JAR Report'
+            inputs:
+              pathToPublish: '$(Build.ArtifactStagingDirectory)'
+              artifactName: 'trivy-jar-report'
+            condition: always()
+
+  # =====================================================
+  # STAGE 6: DOCKER BUILD
+  # =====================================================
+  - stage: DockerBuild
+    displayName: 'Docker Build'
+    dependsOn: Trivy_ArtifactScan
+    jobs:
+      - job: BuildDocker
+        displayName: 'Build Docker Image'
+        steps:
+          - task: DownloadBuildArtifacts@0
+            inputs:
+              buildType: 'current'
+              downloadType: 'single'
+              artifactName: 'app-artifact'
+              downloadPath: '$(System.ArtifactsDirectory)'
+
+          - task: Docker@2
+            displayName: 'Build Docker Image'
+            inputs:
+              containerRegistry: '$(dockerRegistry)'
+              repository: '$(imageName)'
+              command: 'build'
+              Dockerfile: '**/Dockerfile'
+              tags: |
+                $(imageTag)
+                latest
+
+          - script: |
+              # Save Docker image as tar for scanning
+              docker save $(dockerRegistry)/$(imageName):$(imageTag) -o $(Build.ArtifactStagingDirectory)/docker-image.tar
+            displayName: 'Save Docker Image'
+
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publish Docker Image Tar'
+            inputs:
+              pathToPublish: '$(Build.ArtifactStagingDirectory)/docker-image.tar'
+              artifactName: 'docker-image-tar'
+
+  # =====================================================
+  # STAGE 7: TRIVY SCAN - DOCKER IMAGE
+  # =====================================================
+  - stage: Trivy_ImageScan
+    displayName: 'Trivy Image Scan'
+    dependsOn: DockerBuild
+    jobs:
+      - job: TrivyImageScan
+        displayName: 'Scan Docker Image'
+        steps:
+          - script: |
+              # Install Trivy
+              curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin v0.48.0
+            displayName: 'Install Trivy'
+
+          - task: Docker@2
+            displayName: 'Docker Login'
+            inputs:
+              containerRegistry: '$(dockerRegistry)'
+              command: 'login'
+
+          - script: |
+              echo "=== Scanning Docker image for vulnerabilities ==="
+              
+              # Pull the image
+              docker pull $(dockerRegistry)/$(imageName):$(imageTag) || true
+              
+              # Table format for console
+              trivy image $(dockerRegistry)/$(imageName):$(imageTag) \
+                --severity $(trivySeverity) \
+                --format table \
+                --output $(Build.ArtifactStagingDirectory)/trivy-image-report.txt
+              
+              # JSON format for parsing
+              trivy image $(dockerRegistry)/$(imageName):$(imageTag) \
+                --severity $(trivySeverity) \
+                --format json \
+                --output $(Build.ArtifactStagingDirectory)/trivy-image-report.json
+              
+              # SARIF format for Azure DevOps Security tab
+              trivy image $(dockerRegistry)/$(imageName):$(imageTag) \
+                --severity $(trivySeverity) \
+                --format sarif \
+                --output $(Build.ArtifactStagingDirectory)/trivy-image-report.sarif
+              
+              # HTML report
+              trivy image $(dockerRegistry)/$(imageName):$(imageTag) \
+                --severity $(trivySeverity) \
+                --format template \
+                --template "@contrib/html.tpl" \
+                --output $(Build.ArtifactStagingDirectory)/trivy-image-report.html || true
+              
+              # Display results
+              cat $(Build.ArtifactStagingDirectory)/trivy-image-report.txt
+              
+              # Fail on critical vulnerabilities
+              trivy image $(dockerRegistry)/$(imageName):$(imageTag) \
+                --severity CRITICAL \
+                --exit-code 1 \
+                --ignore-unfixed || {
+                  echo "##vso[task.logissue type=error]CRITICAL vulnerabilities found in Docker image!"
+                  exit 1
+                }
+            displayName: 'Trivy Image Scan'
+
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publish Trivy Image Report'
+            inputs:
+              pathToPublish: '$(Build.ArtifactStagingDirectory)'
+              artifactName: 'trivy-image-report'
+            condition: always()
+
+  # =====================================================
+  # STAGE 8: PUSH DOCKER IMAGE
+  # =====================================================
+  - stage: DockerPush
+    displayName: 'Docker Push'
+    dependsOn: Trivy_ImageScan
+    jobs:
+      - job: PushDocker
+        displayName: 'Push Docker Image'
+        steps:
+          - task: Docker@2
+            displayName: 'Push Docker Image'
+            inputs:
+              containerRegistry: '$(dockerRegistry)'
+              repository: '$(imageName)'
+              command: 'push'
+              tags: |
+                $(imageTag)
+                latest
+
+  # =====================================================
+  # STAGE 9: DEPLOY TO STAGING
+  # =====================================================
+  - stage: DeployStaging
+    displayName: 'Deploy to Staging'
+    dependsOn: DockerPush
+    jobs:
+      - deployment: DeployToStaging
+        displayName: 'Deploy to Staging'
+        environment: 'staging'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: KubernetesManifest@0
+                  displayName: 'Deploy to Staging'
+                  inputs:
+                    action: 'deploy'
+                    kubernetesServiceConnection: '$(kubernetesServiceConnection)'
+                    namespace: '$(stagingNamespace)'
+                    manifests: |
+                      $(Pipeline.Workspace)/manifests/deployment.yaml
+                      $(Pipeline.Workspace)/manifests/service.yaml
+                    containers: '$(dockerRegistry)/$(imageName):$(imageTag)'
+
+                - script: |
+                    echo "Waiting for deployment to be ready..."
+                    sleep 60
+                  displayName: 'Wait for Deployment'
+
+  # =====================================================
+  # STAGE 10: OWASP ZAP - DAST SCAN
+  # =====================================================
+  - stage: OWASP_ZAP
+    displayName: 'OWASP ZAP DAST'
+    dependsOn: DeployStaging
+    jobs:
+      - job: ZAPScan
+        displayName: 'Dynamic Security Testing'
+        steps:
+          - script: |
+              echo "=== Running OWASP ZAP DAST Scan ==="
+              
+              # Pull ZAP Docker image
+              docker pull owasp/zap2docker-stable
+              
+              # Create reports directory
+              mkdir -p $(Build.ArtifactStagingDirectory)/zap-reports
+              
+              # Run ZAP Baseline Scan
+              docker run --rm \
+                -v $(Build.ArtifactStagingDirectory)/zap-reports:/zap/wrk:rw \
+                owasp/zap2docker-stable zap-baseline.py \
+                -t http://staging-app.$(stagingNamespace).svc.cluster.local:8080 \
+                -r zap-report.html \
+                -J zap-report.json \
+                -x zap-report.xml \
+                -I || true
+              
+              # Check for high-risk alerts
+              if [ -f "$(Build.ArtifactStagingDirectory)/zap-reports/zap-report.json" ]; then
+                HIGH_ALERTS=$(cat $(Build.ArtifactStagingDirectory)/zap-reports/zap-report.json | jq '[.site[].alerts[] | select(.riskcode >= 3)] | length')
+                echo "High-risk alerts found: $HIGH_ALERTS"
+                
+                if [ "$HIGH_ALERTS" -gt 0 ]; then
+                  echo "##vso[task.logissue type=warning]High-risk vulnerabilities detected by OWASP ZAP!"
+                fi
+              fi
+            displayName: 'OWASP ZAP Baseline Scan'
+
+          - script: |
+              # Run ZAP Full Scan (optional - takes longer)
+              docker run --rm \
+                -v $(Build.ArtifactStagingDirectory)/zap-reports:/zap/wrk:rw \
+                owasp/zap2docker-stable zap-full-scan.py \
+                -t http://staging-app.$(stagingNamespace).svc.cluster.local:8080 \
+                -r zap-full-report.html \
+                -J zap-full-report.json \
+                -I || true
+            displayName: 'OWASP ZAP Full Scan'
+            condition: eq(variables['runFullZapScan'], 'true')
+
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publish ZAP Reports'
+            inputs:
+              pathToPublish: '$(Build.ArtifactStagingDirectory)/zap-reports'
+              artifactName: 'zap-reports'
+            condition: always()
+
+        #   - task: PublishBuildArtifacts@1
+        #     displayName: 'Publish ZAP HTML Report'
+        #     inputs:
+        #       reportDir: '$(Build.ArtifactStagingDirectory)/zap-reports/zap-report.html'
+        #       tabName: 'OWASP ZAP Report'
+        #     condition: always()
+
+  # =====================================================
+  # STAGE 11: SECURITY SUMMARY
+  # =====================================================
+  - stage: SecuritySummary
+    displayName: 'Security Summary'
+    dependsOn:
+      - OWASP_ZAP
+      - Trivy_ImageScan
+      - OWASP_DependencyCheck
+    jobs:
+      - job: SummaryJob
+        displayName: 'Generate Security Summary'
+        steps:
+          - task: DownloadBuildArtifacts@0
+            inputs:
+              buildType: 'current'
+              downloadType: 'all'
+              downloadPath: '$(System.ArtifactsDirectory)'
+
+          - script: |
+              echo "=============================================="
+              echo "         SECURITY SCAN SUMMARY                "
+              echo "=============================================="
+              echo ""
+              echo "Build: $(Build.BuildNumber)"
+              echo "Image: $(dockerRegistry)/$(imageName):$(imageTag)"
+              echo ""
+              echo "📊 SonarQube Analysis: COMPLETED"
+              echo "✅ Quality Gate: PASSED"
+              echo ""
+              
+              echo "📦 OWASP Dependency Check:"
+              if [ -f "$(System.ArtifactsDirectory)/owasp-report/dependency-check-report.json" ]; then
+                VULN_COUNT=$(cat $(System.ArtifactsDirectory)/owasp-report/dependency-check-report.json | jq '.dependencies | map(select(.vulnerabilities != null)) | length' 2>/dev/null || echo "N/A")
+                echo "   Dependencies with vulnerabilities: $VULN_COUNT"
+              fi
+              echo ""
+              
+              echo "🔍 Trivy JAR Scan:"
+              if [ -f "$(System.ArtifactsDirectory)/trivy-jar-report/trivy-jar-report.json" ]; then
+                HIGH=$(cat $(System.ArtifactsDirectory)/trivy-jar-report/trivy-jar-report.json | jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' 2>/dev/null || echo "0")
+                CRITICAL=$(cat $(System.ArtifactsDirectory)/trivy-jar-report/trivy-jar-report.json | jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' 2>/dev/null || echo "0")
+                echo "   HIGH: $HIGH | CRITICAL: $CRITICAL"
+              fi
+              echo ""
+              
+              echo "🐳 Trivy Image Scan:"
+              if [ -f "$(System.ArtifactsDirectory)/trivy-image-report/trivy-image-report.json" ]; then
+                HIGH=$(cat $(System.ArtifactsDirectory)/trivy-image-report/trivy-image-report.json | jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length' 2>/dev/null || echo "0")
+                CRITICAL=$(cat $(System.ArtifactsDirectory)/trivy-image-report/trivy-image-report.json | jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length' 2>/dev/null || echo "0")
+                echo "   HIGH: $HIGH | CRITICAL: $CRITICAL"
+              fi
+              echo ""
+              
+              echo "🕷️ OWASP ZAP DAST:"
+              if [ -f "$(System.ArtifactsDirectory)/zap-reports/zap-report.json" ]; then
+                ALERTS=$(cat $(System.ArtifactsDirectory)/zap-reports/zap-report.json | jq '.site[0].alerts | length' 2>/dev/null || echo "0")
+                echo "   Security alerts found: $ALERTS"
+              fi
+              echo ""
+              echo "=============================================="
+            displayName: 'Security Summary Report'
+
+  # =====================================================
+  # STAGE 12: DEPLOY TO PRODUCTION
+  # =====================================================
+  - stage: DeployProduction
+    displayName: 'Deploy to Production'
+    dependsOn: SecuritySummary
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - deployment: DeployToProd
+        displayName: 'Deploy to Production'
+        environment: 'production'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: KubernetesManifest@0
+                  displayName: 'Deploy to Production'
+                  inputs:
+                    action: 'deploy'
+                    kubernetesServiceConnection: '$(kubernetesServiceConnection)'
+                    namespace: '$(productionNamespace)'
+                    manifests: |
+                      $(Pipeline.Workspace)/manifests/deployment.yaml
+                      $(Pipeline.Workspace)/manifests/service.yaml
+                    containers: '$(dockerRegistry)/$(imageName):$(imageTag)'
+
+                - script: |
+                    echo "✅ Deployed to Production!"
+                    echo "Image: $(dockerRegistry)/$(imageName):$(imageTag)"
+                  displayName: 'Deployment Success'
