@@ -13,7 +13,7 @@ pr:
 
 variables:
   # Docker Registry
-  dockerRegistry: 'your-registry.azurecr.io'
+  dockerRegistry: 'ashudevops'
   imageName: 'myapp'
   imageTag: '$(Build.BuildId)'
   
@@ -387,39 +387,39 @@ stages:
   # =====================================================
   # STAGE 9: DEPLOY TO STAGING
   # =====================================================
-  - stage: DeployStaging
-    displayName: 'Deploy to Staging'
-    dependsOn: DockerPush
-    jobs:
-      - deployment: DeployToStaging
-        displayName: 'Deploy to Staging'
-        environment: 'staging'
-        strategy:
-          runOnce:
-            deploy:
-              steps:
-                - task: KubernetesManifest@0
-                  displayName: 'Deploy to Staging'
-                  inputs:
-                    action: 'deploy'
-                    kubernetesServiceConnection: '$(kubernetesServiceConnection)'
-                    namespace: '$(stagingNamespace)'
-                    manifests: |
-                      $(Pipeline.Workspace)/manifests/deployment.yaml
-                      $(Pipeline.Workspace)/manifests/service.yaml
-                    containers: '$(dockerRegistry)/$(imageName):$(imageTag)'
+  # - stage: DeployStaging
+  #   displayName: 'Deploy to Staging'
+  #   dependsOn: DockerPush
+  #   jobs:
+  #     - deployment: DeployToStaging
+  #       displayName: 'Deploy to Staging'
+  #       environment: 'staging'
+  #       strategy:
+  #         runOnce:
+  #           deploy:
+  #             steps:
+  #               - task: KubernetesManifest@0
+  #                 displayName: 'Deploy to Staging'
+  #                 inputs:
+  #                   action: 'deploy'
+  #                   kubernetesServiceConnection: '$(kubernetesServiceConnection)'
+  #                   namespace: '$(stagingNamespace)'
+  #                   manifests: |
+  #                     $(Pipeline.Workspace)/manifests/deployment.yaml
+  #                     $(Pipeline.Workspace)/manifests/service.yaml
+  #                   containers: '$(dockerRegistry)/$(imageName):$(imageTag)'
 
-                - script: |
-                    echo "Waiting for deployment to be ready..."
-                    sleep 60
-                  displayName: 'Wait for Deployment'
+  #               - script: |
+  #                   echo "Waiting for deployment to be ready..."
+  #                   sleep 60
+  #                 displayName: 'Wait for Deployment'
 
   # =====================================================
   # STAGE 10: OWASP ZAP - DAST SCAN
   # =====================================================
   - stage: OWASP_ZAP
     displayName: 'OWASP ZAP DAST'
-    dependsOn: DeployStaging
+#    dependsOn: DeployStaging
     jobs:
       - job: ZAPScan
         displayName: 'Dynamic Security Testing'
@@ -485,10 +485,10 @@ stages:
   # =====================================================
   - stage: SecuritySummary
     displayName: 'Security Summary'
-    dependsOn:
-      - OWASP_ZAP
-      - Trivy_ImageScan
-      - OWASP_DependencyCheck
+# #    dependsOn:
+#       - OWASP_ZAP
+#       - Trivy_ImageScan
+#       - OWASP_DependencyCheck
     jobs:
       - job: SummaryJob
         displayName: 'Generate Security Summary'
@@ -546,30 +546,30 @@ stages:
   # =====================================================
   # STAGE 12: DEPLOY TO PRODUCTION
   # =====================================================
-  - stage: DeployProduction
-    displayName: 'Deploy to Production'
-    dependsOn: SecuritySummary
-    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
-    jobs:
-      - deployment: DeployToProd
-        displayName: 'Deploy to Production'
-        environment: 'production'
-        strategy:
-          runOnce:
-            deploy:
-              steps:
-                - task: KubernetesManifest@0
-                  displayName: 'Deploy to Production'
-                  inputs:
-                    action: 'deploy'
-                    kubernetesServiceConnection: '$(kubernetesServiceConnection)'
-                    namespace: '$(productionNamespace)'
-                    manifests: |
-                      $(Pipeline.Workspace)/manifests/deployment.yaml
-                      $(Pipeline.Workspace)/manifests/service.yaml
-                    containers: '$(dockerRegistry)/$(imageName):$(imageTag)'
+#   - stage: DeployProduction
+#     displayName: 'Deploy to Production'
+# #    dependsOn: SecuritySummary
+#     condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+#     jobs:
+#       - deployment: DeployToProd
+#         displayName: 'Deploy to Production'
+#         environment: 'production'
+#         strategy:
+#           runOnce:
+#             deploy:
+#               steps:
+#                 - task: KubernetesManifest@0
+#                   displayName: 'Deploy to Production'
+#                   inputs:
+#                     action: 'deploy'
+#                     kubernetesServiceConnection: '$(kubernetesServiceConnection)'
+#                     namespace: '$(productionNamespace)'
+#                     manifests: |
+#                       $(Pipeline.Workspace)/manifests/deployment.yaml
+#                       $(Pipeline.Workspace)/manifests/service.yaml
+#                     containers: '$(dockerRegistry)/$(imageName):$(imageTag)'
 
-                - script: |
-                    echo "✅ Deployed to Production!"
-                    echo "Image: $(dockerRegistry)/$(imageName):$(imageTag)"
-                  displayName: 'Deployment Success'
+#                 - script: |
+#                     echo "✅ Deployed to Production!"
+#                     echo "Image: $(dockerRegistry)/$(imageName):$(imageTag)"
+#                   displayName: 'Deployment Success'
