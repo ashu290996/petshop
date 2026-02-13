@@ -74,6 +74,16 @@ stages:
               publishJUnitResults: true
               testResultsFiles: '**/surefire-reports/TEST-*.xml'
 
+          - task: Maven@4
+            displayName: 'Run Unit Tests'
+            inputs:
+              mavenPomFile: 'pom.xml'
+              goals: 'clean package'
+              javaHomeOption: 'JDKVersion'
+#              jdkVersionOption: '1.17'
+              publishJUnitResults: true
+              testResultsFiles: '**/surefire-reports/TEST-*.xml'
+
           - task: PublishBuildArtifacts@1
             displayName: 'Publish JAR Artifact'
             inputs:
