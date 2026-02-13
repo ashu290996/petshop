@@ -35,7 +35,7 @@ variables:
   owaspFailOnCVSS: 7
 
 pool:
-  vmImage: $(vmImageName)
+  name: default
 
 stages:
   # =====================================================
@@ -55,7 +55,7 @@ stages:
                 maven | "$(Agent.OS)"
               path: $(mavenCacheFolder)
 
-          - task: Maven@3
+          - task: Maven@4
             displayName: 'Maven Build'
             inputs:
               mavenPomFile: 'pom.xml'
@@ -64,7 +64,7 @@ stages:
               javaHomeOption: 'JDKVersion'
               jdkVersionOption: '1.17'
 
-          - task: Maven@3
+          - task: Maven@4
             displayName: 'Run Unit Tests'
             inputs:
               mavenPomFile: 'pom.xml'
@@ -107,7 +107,7 @@ stages:
                 sonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml
                 sonar.exclusions=**/test/**,**/generated/**
 
-          - task: Maven@3
+          - task: Maven@4
             displayName: 'Run SonarQube Analysis'
             inputs:
               mavenPomFile: 'pom.xml'
