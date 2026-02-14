@@ -289,18 +289,6 @@
     </repository>
   </repositories>
 
-
-  <!-- <repository>
-  <id>ashu29996</id>
-  <url>https://pkgs.dev.azure.com/ashu29996/_packaging/ashu29996/maven/v1</url>
-  <releases>
-    <enabled>true</enabled>
-  </releases>
-  <snapshots>
-    <enabled>true</enabled>
-  </snapshots>
-  </repository> -->
-
   <pluginRepositories>
     <pluginRepository>
       <id>sonatype-oss-snapshots</id>
