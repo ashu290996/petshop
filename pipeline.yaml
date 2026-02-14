@@ -63,7 +63,13 @@ stages:
               options: '-DskipTests'
               javaHomeOption: 'JDKVersion'
 #              jdkVersionOption: '1.17'
-
+          
+          - task: PublishBuildArtifacts@1
+            displayName: 'Publish WAR Artifact1'
+            continueOnError: true
+            inputs:
+              pathToPublish: 'target/*.war'
+              artifactName: 'app-artifact'
           - task: Maven@4
             displayName: 'Run Unit Tests'
             inputs:
@@ -85,11 +91,17 @@ stages:
               testResultsFiles: '**/surefire-reports/TEST-*.xml'
 
           - task: PublishBuildArtifacts@1
-            displayName: 'Publish JAR Artifact'
+            displayName: 'Publish WAR Artifact2'
             continueOnError: true
             inputs:
               pathToPublish: 'target/*.war'
               artifactName: 'app-artifact'
+
+          # - task: PublishBuildArtifacts@1
+          #   inputs:
+          #     PathtoPublish: 'target/*.war'
+          #     ArtifactName: 'app-artifact'
+          #     publishLocation: 'Container'
 
   # =====================================================
   # STAGE 2: SONARQUBE ANALYSIS (SAST)
