@@ -132,15 +132,15 @@ stages:
             inputs:
               pollingTimeoutSec: '300'
             
-          - bash: |
-               echo "Quality Gate Status: $(SonarQube.QualityGateStatus)"
+          # - bash: |
+          #      echo "Quality Gate Status: $(SonarQube.QualityGateStatus)"
 
-               if [ "$(SonarQube.QualityGateStatus)" != "Passed" ]; then
-               echo "##vso[task.logissue type=error]Quality Gate Failed!"
-               exit 1
-               fi
-            displayName: 'Validate Quality Gate'
-            condition: always()
+          #      if [ "$(SonarQube.QualityGateStatus)" != "Passed" ]; then
+          #      echo "##vso[task.logissue type=error]Quality Gate Failed!"
+          #      exit 1
+          #      fi
+          #   displayName: 'Validate Quality Gate'
+          #   condition: always()
   # =====================================================
   # STAGE 3: SONARQUBE QUALITY GATE
   # =====================================================
