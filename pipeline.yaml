@@ -94,18 +94,6 @@ stages:
               publishJUnitResults: true
               testResultsFiles: '**/surefire-reports/TEST-*.xml'
 
-          - task: PublishBuildArtifacts@1
-            displayName: 'Publish WAR Artifact2'
-            continueOnError: true
-            inputs:
-              pathToPublish: 'target'
-              artifactName: 'app-artifact'
-
-          # - task: PublishBuildArtifacts@1
-          #   inputs:
-          #     PathtoPublish: 'target/*.war'
-          #     ArtifactName: 'app-artifact'
-          #     publishLocation: 'Container'
 
   # =====================================================
   # STAGE 2: SONARQUBE ANALYSIS (SAST)
