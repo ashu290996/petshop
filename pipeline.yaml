@@ -14,12 +14,12 @@ pr:
 variables:
   # Docker Registry
   dockerRegistry: 'ashudevops'
-  imageName: 'myapp'
+  imageName: 'petshop'
   imageTag: '$(Build.BuildId)'
   
   # SonarQube
   sonarQubeServiceConnection: 'SonarQube'
-  sonarProjectKey: 'myapp'
+  sonarProjectKey: 'petshop'
   
   # Kubernetes
   kubernetesServiceConnection: 'AKS-Connection'
@@ -101,10 +101,10 @@ stages:
       - job: SonarAnalysis
         displayName: 'SAST - Code Quality'
         steps:
-          - task: Cache@2
-            inputs:
-              key: 'maven | "$(Agent.OS)" | pom.xml'
-              path: $(mavenCacheFolder)
+          # - task: Cache@2
+          #   inputs:
+          #     key: 'maven | "$(Agent.OS)" | pom.xml'
+          #     path: $(mavenCacheFolder)
 
           - task: SonarQubePrepare@8
             displayName: 'Prepare SonarQube Analysis'
