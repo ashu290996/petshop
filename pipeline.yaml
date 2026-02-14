@@ -131,37 +131,46 @@ stages:
             displayName: 'Publish SonarQube Results'
             inputs:
               pollingTimeoutSec: '300'
+            
+          - bash: |
+               echo "Quality Gate Status: $(SonarQube.QualityGateStatus)"
 
+               if [ "$(SonarQube.QualityGateStatus)" != "Passed" ]; then
+               echo "##vso[task.logissue type=error]Quality Gate Failed!"
+               exit 1
+               fi
+            displayName: 'Validate Quality Gate'
+            condition: always()
   # =====================================================
   # STAGE 3: SONARQUBE QUALITY GATE
   # =====================================================
-  - stage: QualityGate
-    displayName: 'Quality Gate Check'
-    dependsOn: SonarQube
-    jobs:
-      - job: QualityGateJob
-        displayName: 'Check Quality Gate'
-        steps:
-          - task: SonarQubePublish@8
-            displayName: 'Wait for Quality Gate'
-            inputs:
-              pollingTimeoutSec: '300'
+  # - stage: QualityGate
+  #   displayName: 'Quality Gate Check'
+  #   dependsOn: SonarQube
+  #   jobs:
+  #     - job: QualityGateJob
+  #       displayName: 'Check Quality Gate'
+  #       steps:
+  #         - task: SonarQubePublish@8
+  #           displayName: 'Wait for Quality Gate'
+  #           inputs:
+  #             pollingTimeoutSec: '300'
 
-          - script: |
-              echo "Quality Gate Status: $(SonarQube.QualityGateStatus)"
-              if [ "$(SonarQube.QualityGateStatus)" != "OK" ]; then
-                echo "##vso[task.logissue type=error]Quality Gate Failed!"
-                exit 1
-              fi
-            displayName: 'Validate Quality Gate'
-            condition: always()
+  #         - script: |
+  #             echo "Quality Gate Status: $(SonarQube.QualityGateStatus)"
+  #             if [ "$(SonarQube.QualityGateStatus)" != "OK" ]; then
+  #               echo "##vso[task.logissue type=error]Quality Gate Failed!"
+  #               exit 1
+  #             fi
+  #           displayName: 'Validate Quality Gate'
+  #           condition: always()
 
   # =====================================================
   # STAGE 4: OWASP DEPENDENCY CHECK (SCA)
   # =====================================================
   - stage: OWASP_DependencyCheck
     displayName: 'OWASP Dependency Check'
-    dependsOn: QualityGate
+    dependsOn: SonarQube
     jobs:
       - job: DependencyCheckJob
         displayName: 'SCA - Dependency Scan'
