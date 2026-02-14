@@ -68,7 +68,7 @@ stages:
             displayName: 'Publish WAR Artifact1'
             continueOnError: true
             inputs:
-              pathToPublish: 'target/*.war'
+              pathToPublish: 'target/jpetstore.war'
               artifactName: 'app-artifact'
           - task: Maven@4
             displayName: 'Run Unit Tests'
@@ -90,12 +90,12 @@ stages:
               publishJUnitResults: true
               testResultsFiles: '**/surefire-reports/TEST-*.xml'
 
-          - task: PublishBuildArtifacts@1
-            displayName: 'Publish WAR Artifact2'
-            continueOnError: true
-            inputs:
-              pathToPublish: 'target/*.war'
-              artifactName: 'app-artifact'
+          # - task: PublishBuildArtifacts@1
+          #   displayName: 'Publish WAR Artifact2'
+          #   continueOnError: true
+          #   inputs:
+          #     pathToPublish: 'target/jpetstore.war'
+          #     artifactName: 'app-artifact'
 
           # - task: PublishBuildArtifacts@1
           #   inputs:
