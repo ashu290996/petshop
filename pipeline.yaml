@@ -33,6 +33,7 @@ variables:
   # Security Thresholds
   trivySeverity: 'HIGH,CRITICAL'
   owaspFailOnCVSS: 7
+ 
 
 pool:
   name: default
@@ -54,13 +55,16 @@ stages:
               restoreKeys: |
                 maven | "$(Agent.OS)"
               path: $(mavenCacheFolder)
-
+          
+          - script: |
+              mkdir -p $(MAVEN_CACHE_FOLDER)
+            displayName: Ensure Maven folder exists
           - task: Maven@4
             displayName: 'Maven Build'
             inputs:
               mavenPomFile: 'pom.xml'
               goals: 'clean package'
-              options: '-DskipTests'
+              options: '-Dmaven.repo.local=$(mavenCacheFolder) -DskipTests'
               javaHomeOption: 'JDKVersion'
 #              jdkVersionOption: '1.17'
           
