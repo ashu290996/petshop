@@ -57,7 +57,7 @@ stages:
               path: $(mavenCacheFolder)
           
           - script: |
-              mkdir -p $(MAVEN_CACHE_FOLDER)
+              mkdir -p $(mavenCacheFolder)
             displayName: Ensure Maven folder exists
           - task: Maven@4
             displayName: 'Maven Build'
