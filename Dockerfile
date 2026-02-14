@@ -8,10 +8,10 @@ FROM eclipse-temurin:21-jre
 
 WORKDIR /app
 
-COPY --from=builder /app/target/*.jar app.jar
-EXPOSE 8080
+COPY --from=builder /app/target/*.war petapp.war
+EXPOSE 8083
 
-ENTRYPOINT ["java", "-jar", "app.jar"]
+ENTRYPOINT ["java", "-jar", "petapp.war"]
 
 
 
