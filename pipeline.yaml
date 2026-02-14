@@ -240,14 +240,14 @@ stages:
               artifactName: 'app-artifact'
               downloadPath: '$(System.ArtifactsDirectory)'
 
-          - script: |
-              # Install Trivy
-              echo "Installing Trivy..."
-              curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin v0.48.0
+          # - script: |
+          #     # Install Trivy
+          #     echo "Installing Trivy..."
+          #     curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin v0.48.0
               
-              # Verify installation
-              trivy --version
-            displayName: 'Install Trivy'
+          #     # Verify installation
+          #     trivy --version
+          #   displayName: 'Install Trivy'
 
           - script: |
               echo "=== Scanning JAR files for vulnerabilities ==="
@@ -338,10 +338,10 @@ stages:
       - job: TrivyImageScan
         displayName: 'Scan Docker Image'
         steps:
-          - script: |
-              # Install Trivy
-              curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin v0.48.0
-            displayName: 'Install Trivy'
+          # - script: |
+          #     # Install Trivy
+          #     curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin v0.48.0
+          #   displayName: 'Install Trivy'
 
           - task: Docker@2
             displayName: 'Docker Login'
