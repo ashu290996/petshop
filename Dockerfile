@@ -1,24 +1,24 @@
-# FROM maven:3.9.9-eclipse-temurin-21 AS builder
-# WORKDIR /app
-# COPY . .
-
-# RUN mvn clean package -DskipTests
-
-# FROM eclipse-temurin:21-jre
-
-# WORKDIR /app
-
-# COPY --from=builder /app/target/*.war petapp.war
-# EXPOSE 8083
-
-# ENTRYPOINT ["java", "-jar", "petapp.war"]
-
-
-FROM openjdk:27-ea-slim
+FROM maven:3.9.9-eclipse-temurin-21 AS builder
 WORKDIR /app
-COPY *.war /app
+COPY . .
 
-EXPOSE 8080
+RUN mvn clean package -DskipTests
 
-ENTRYPOINT ["java", "-jar", "jpetstore.war"]
+FROM eclipse-temurin:21-jre
+
+WORKDIR /app
+
+COPY --from=builder /app/target/*.war petapp.war
+EXPOSE 8083
+
+ENTRYPOINT ["java", "-jar", "petapp.war"]
+
+
+# FROM openjdk:27-ea-slim
+# WORKDIR /app
+# COPY *.war /app
+
+# EXPOSE 8080
+
+# ENTRYPOINT ["java", "-jar", "jpetstore.war"]
 
