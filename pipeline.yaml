@@ -14,7 +14,7 @@ pr:
 variables:
   # Docker Registry
   dockerRegistry: 'ashudevops'
-  imageName: 'petshop'
+  imageName: 'ashu290996/petshop'
   imageTag: '$(Build.BuildId)'
   
   # SonarQube
