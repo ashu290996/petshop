@@ -9,7 +9,7 @@ FROM eclipse-temurin:21-jre
 WORKDIR /app
 
 COPY --from=builder /app/target/*.war petapp.war
-EXPOSE 8083
+EXPOSE 8080
 
 ENTRYPOINT ["java", "-jar", "petapp.war"]
 
