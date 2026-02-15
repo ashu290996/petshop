@@ -74,15 +74,23 @@ stages:
             inputs:
               pathToPublish: 'target/jpetstore.war'
               artifactName: 'app-artifact'
-          - task: Maven@4
-            displayName: 'Run Unit Tests'
+
+          - task: PublishPipelineArtifact@1
             inputs:
-              mavenPomFile: 'pom.xml'
-              goals: 'test'
-              javaHomeOption: 'JDKVersion'
-#              jdkVersionOption: '1.17'
-              publishJUnitResults: true
-              testResultsFiles: '**/surefire-reports/TEST-*.xml'
+              targetPath: '$(Pipeline.Workspace)'
+              artifact: 'jpetstore.war'
+              publishLocation: 'pipeline'
+
+
+#           - task: Maven@4
+#             displayName: 'Run Unit Tests'
+#             inputs:
+#               mavenPomFile: 'pom.xml'
+#               goals: 'test'
+#               javaHomeOption: 'JDKVersion'
+# #              jdkVersionOption: '1.17'
+#               publishJUnitResults: true
+#               testResultsFiles: '**/surefire-reports/TEST-*.xml'
 
 #           - task: Maven@4
 #             displayName: 'Run Package'
