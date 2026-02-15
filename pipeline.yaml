@@ -299,22 +299,22 @@ stages:
             inputs:
               containerRegistry: '$(dockerRegistry)'
               repository: '$(imageName)'
-              command: 'build'
+              command: 'buildAndPush'
               Dockerfile: '**/Dockerfile'
               tags: |
                 $(imageTag)
                 latest
 
-          - script: |
-              # Save Docker image as tar for scanning
-              docker save $(dockerRegistry)/$(imageName):$(imageTag) -o $(Build.ArtifactStagingDirectory)/docker-image.tar
-            displayName: 'Save Docker Image'
+          # - script: |
+          #     # Save Docker image as tar for scanning
+          #     docker save $(dockerRegistry)/$(imageName):$(imageTag) -o $(Build.ArtifactStagingDirectory)/docker-image.tar
+          #   displayName: 'Save Docker Image'
 
-          - task: PublishBuildArtifacts@1
-            displayName: 'Publish Docker Image Tar'
-            inputs:
-              pathToPublish: '$(Build.ArtifactStagingDirectory)/docker-image.tar'
-              artifactName: 'docker-image-tar'
+          # - task: PublishBuildArtifacts@1
+          #   displayName: 'Publish Docker Image Tar'
+          #   inputs:
+          #     pathToPublish: '$(Build.ArtifactStagingDirectory)/docker-image.tar'
+          #     artifactName: 'docker-image-tar'
 
   # =====================================================
   # STAGE 7: TRIVY SCAN - DOCKER IMAGE
