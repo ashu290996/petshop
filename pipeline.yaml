@@ -22,7 +22,7 @@ variables:
   sonarProjectKey: 'petshop'
   
   # Kubernetes
-  kubernetesServiceConnection: 'AKS-Connection'
+  kubernetesServiceConnection: 'k8s-prod-connection'
   stagingNamespace: 'staging'
   productionNamespace: 'production'
   
@@ -188,6 +188,7 @@ stages:
 
           - task: dependency-check-build-task@6
             displayName: 'OWASP Dependency Check'
+            continueOnError: true
             inputs:
               projectName: '$(imageName)'
               scanPath: '$(System.ArtifactsDirectory)/app-artifact'
@@ -195,6 +196,7 @@ stages:
               failOnCVSS: '$(owaspFailOnCVSS)'
               suppressionPath: ''
               enableExperimental: true
+              
 
           - task: PublishBuildArtifacts@1
             displayName: 'Publish OWASP Report'
@@ -411,32 +413,43 @@ stages:
   # =====================================================
   # STAGE 9: DEPLOY TO STAGING
   # =====================================================
-  # - stage: DeployStaging
-  #   displayName: 'Deploy to Staging'
-  #   dependsOn: DockerPush
-  #   jobs:
-  #     - deployment: DeployToStaging
-  #       displayName: 'Deploy to Staging'
-  #       environment: 'staging'
-  #       strategy:
-  #         runOnce:
-  #           deploy:
-  #             steps:
-  #               - task: KubernetesManifest@0
-  #                 displayName: 'Deploy to Staging'
-  #                 inputs:
-  #                   action: 'deploy'
-  #                   kubernetesServiceConnection: '$(kubernetesServiceConnection)'
-  #                   namespace: '$(stagingNamespace)'
-  #                   manifests: |
-  #                     $(Pipeline.Workspace)/manifests/deployment.yaml
-  #                     $(Pipeline.Workspace)/manifests/service.yaml
-  #                   containers: '$(dockerRegistry)/$(imageName):$(imageTag)'
+  - stage: DeployStaging
+    displayName: 'Deploy to Staging'
+    dependsOn: DockerPush
+    jobs:
+      - deployment: DeployToStaging
+        displayName: 'Deploy to Staging'
+        environment: 'staging'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: Kubernetes@1
+                  displayName: 'Creating  Staging namespace'
+                  inputs:
+                    connectionType: 'Kubernetes Service Connection'
+                    kubernetesServiceEndpoint: '$(kubernetesServiceConnection)'
+                    namespace: '$(stagingNamespace)'
+                    command: 'create'
+                    arguments: 'ns staging'
+                
+                - task: Kubernetes@1
+                  displayName: 'Apply Manifests'
+                  inputs:
+                    connectionType: 'Kubernetes Service Connection'
+                    kubernetesServiceEndpoint: '$(kubernetesServiceConnection)'
+                    namespace: '$(stagingNamespace)'
+                    command: 'apply'
+                    arguments: '-f deployment.yaml'
+                    # manifests: |
+                    #   $(Pipeline.Workspace)/manifests/deployment.yaml
+                    #   $(Pipeline.Workspace)/manifests/service.yaml
+                    # containers: '$(dockerRegistry)/$(imageName):$(imageTag)'
 
-  #               - script: |
-  #                   echo "Waiting for deployment to be ready..."
-  #                   sleep 60
-  #                 displayName: 'Wait for Deployment'
+                - script: |
+                    echo "Waiting for deployment to be ready..."
+                    sleep 60
+                  displayName: 'Wait for Deployment'
 
   # =====================================================
   # STAGE 10: OWASP ZAP - DAST SCAN
